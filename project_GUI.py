@@ -1,4 +1,4 @@
-# Libaries
+## Libaries
 from tkinter import *
 import tkinter.font
 import RPi.GPIO as GPIO
@@ -6,200 +6,346 @@ from time import sleep
 import requests, json
 from threading import Thread
 
+#set pin mode
 GPIO.setmode(GPIO.BCM)
 
 #Disable warnings
 GPIO.setwarnings(False)
 
-## GUI set up
-win = Tk()
-win.title("Obstacle Detection System")
+## Global Variables
+global win, canvas, headingFont, SubheadingFont #GUI Setup variables
+global mode, F_C_Dist
+global DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI #Mode button variables
+global ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI #Manual button variables
+global Cont_Panel, Cont_Panel_Heading #Control panel variables
+global ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI
 
-headingFont = tkinter.font.Font(family = 'Helvetica', size = 15, weight = "bold")
-SubheadingFont = tkinter.font.Font(family = 'Helvetica', size = 12, weight = "bold")
-
-canvas = Canvas(win, width = 715, height = 410)
-canvas.pack()
-
-## Variables
-global mode
-global F_C_Dist_GUI
-global DetectButtonGUI
-global AutoButtonGUI
-global ManualButtonGUI
-global OffButtonGUI
-global ModeDescGUI
-global F_C_Object_GUI
+#GPIO pins for relays
+forwardPin = 2
+backPin = 3
+leftPin = 4
+rightPin = 17
 
 ## Functions
 
-def getDistance():
+# GUI set up
+def InitGUI():
+    global win, canvas, headingFont, SubheadingFont #gloabl variables that require changing
+    
+    win = Tk()
+    win.title("Obstacle Detection System")
+
+    headingFont = tkinter.font.Font(family = 'Helvetica', size = 15, weight = "bold")
+    SubheadingFont = tkinter.font.Font(family = 'Helvetica', size = 12, weight = "bold")
+
+    canvas = Canvas(win, width = 715, height = 410)
+    canvas.pack()
+
+# Set relay pins as outputs
+def setup():
+    GPIO.setup(forwardPin, GPIO.OUT)
+    GPIO.setup(backPin, GPIO.OUT)
+    GPIO.setup(leftPin, GPIO.OUT)
+    GPIO.setup(rightPin, GPIO.OUT)
+
+# Funtion to turn forward pin on
+def forwardOn(event):
+    GPIO.output(forwardPin, GPIO.HIGH)
+   
+# Funtion to turn forward pin off
+def forwardOff(event):
+    GPIO.output(forwardPin, GPIO.LOW)
+
+# Funtion to turn back pin on
+def backOn(event):
+    GPIO.output(backPin, GPIO.HIGH)
+    
+# Funtion to turn back pin off
+def backOff(event):
+    GPIO.output(backPin, GPIO.LOW)
+    
+# Funtion to turn left pin on
+def leftOn(event):
+    GPIO.output(leftPin, GPIO.HIGH)
+    
+# Funtion to turn left pin off
+def leftOff(event):
+    GPIO.output(leftPin, GPIO.LOW)
+    
+# Funtion to turn right pin on
+def rightOn(event):
+    GPIO.output(rightPin, GPIO.HIGH)
+    
+# Funtion to turn right pin off
+def rightOff(event):
+    GPIO.output(rightPin, GPIO.LOW)
+    
+# function to get distance from argon and return the value
+def getFrontDistance():
+    # requests is very slow, hard real time issue, try bluetooth
     responce = requests.get('https://api.particle.io/v1/devices/e00fce6825acdbf3eaef2482/F_C_Dist?access_token=05a78f428e275ea748d57326857802757ed4ead0')
     respJSON = responce.json()
     
+    # try get distance returned as an int and return
     try:
         dist = int(respJSON.get("result"))
         return dist
     except:
         return "Error"
 
+# function to write ditance data and display to GUI
 def writeData(F_C_Dist):
-    global F_C_Dist_GUI, F_C_Object_GUI
+    global F_C_Dist_GUI, F_C_Object_GUI # variables to write to
     
+    # try delete GUI features if they've been initiated
     try:
         canvas.delete(F_C_Dist_GUI, F_C_Object_GUI)
     except:
         pass
     
+    # concatinate distance returned with cm
     F_C_Dist_Str = "{dist}cm".format(dist = F_C_Dist)
     
+    # if no value has been returned and system is in error state notify user
     if F_C_Dist == "Error":
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist)
     elif F_C_Dist <= 80 and F_C_Dist >= 50:
+        # if system detects something between 50 and 80cm display figure and object in orange
         F_C_Object_GUI = canvas.create_rectangle(405, 40, 445, 105, fill = 'orange', outline = 'orange')
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist_Str)
     elif F_C_Dist < 50:
+        # if system detects something less than 50cm away display figure and object in red
         F_C_Object_GUI = canvas.create_rectangle(405, 40, 445, 105, fill = 'red', outline = 'red')
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist_Str)
     else:
+        # if nothing detected and system not in error, display clear
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'green', text = "Clear")
 
-
-def system():
-    global F_C_Dist_GUI, F_C_Object_GUI, mode
+# function to loop on seperate thread constantly measuring front distance and updating GUI
+def DetectionSystem():
+    global F_C_Dist_GUI, F_C_Object_GUI, mode, F_C_Dist #variables to be monitored and changed
     
+    # infinite loop
     while True:
-        F_C_Dist = getDistance()
+        # get distance from argon and store in F_C_Dist
+        F_C_Dist = getFrontDistance()
         
+        # if mode is off do not display data
         if mode == 0:
             pass
         else:
+            # any other mode display data
             writeData(F_C_Dist)
         
-    
+# function to set canvas at start up
 def setCanvas():
-   
+    global F_C_Object_GUI, F_C_Dist_GUI
+    
     #create sections
     canvas.create_rectangle(3, 3, 712, 37, fill = 'grey65', outline = 'grey60')
     canvas.create_rectangle(3, 43, 177, 290, fill = 'grey65', outline = 'grey60')
     canvas.create_rectangle(3, 300, 177, 400, fill = 'grey65', outline = 'grey60')
     
-    # create heading
+    # create headings
     canvas.create_text(360, 20, font = headingFont, text = "Obstacle Detection System")
     canvas.create_text(40, 57, font = SubheadingFont, text = "Mode:")
+    canvas.create_text(70, 315, font = SubheadingFont, text = "Obstacle Data")
     
     # create data section
-    canvas.create_text(70, 315, font = SubheadingFont, text = "Obstacle Data")
     canvas.create_text(40, 350, font = SubheadingFont, text = "Front: ")
     canvas.create_text(41, 375, font = SubheadingFont, text = "Rear: ")
     
     #create car
-    canvas.create_rectangle(350, 110, 500, 360, fill = 'blue2', outline = 'blue') #body
-    canvas.create_rectangle(360, 170, 490, 220, fill = 'black') # windscreen
-    canvas.create_rectangle(360, 260, 490, 350, fill = 'blue4', outline = 'blue4') #tray
-    canvas.create_rectangle(310, 120, 348, 190, fill = 'black') #FLtyre
-    canvas.create_rectangle(502, 120, 540, 190, fill = 'black') #FRtyre
-    canvas.create_rectangle(310, 270, 348, 340, fill = 'black') #RLtyre
-    canvas.create_rectangle(502, 270, 540, 340, fill = 'black') #RRtyre
+    canvas.create_rectangle(320, 110, 470, 360, fill = 'blue2', outline = 'blue') #body
+    canvas.create_rectangle(330, 170, 460, 220, fill = 'black') # windscreen
+    canvas.create_rectangle(330, 260, 460, 350, fill = 'blue4', outline = 'blue4') #tray
+    canvas.create_rectangle(280, 120, 318, 190, fill = 'black') #FLtyre
+    canvas.create_rectangle(472, 120, 510, 190, fill = 'black') #FRtyre
+    canvas.create_rectangle(280, 270, 318, 340, fill = 'black') #RLtyre
+    canvas.create_rectangle(472, 270, 510, 340, fill = 'black') #RRtyre
+    
+    F_C_Object_GUI = canvas.create_rectangle(0, 0, 0, 0)
+    F_C_Dist_GUI = ""
 
+def clearControlsPanel():
+    try:
+        canvas.delete(Cont_Panel, Cont_Panel_Heading, ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI)
+    except:
+        pass
+
+# function to draw control panel and buttons when in certain modes
+def drawControlsPanel():
+    global Cont_Panel, Cont_Panel_Heading, ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI
+    
+    clearControlsPanel()
+    
+    # create control panel with heading
+    Cont_Panel = canvas.create_rectangle(538, 43, 712, 200, fill = 'grey65', outline = 'grey60')
+    Cont_Panel_Heading = canvas.create_text(625, 57, font = SubheadingFont, text = "Manual Controls")
+
+    # create buttons
+    ForButtonGUI = canvas.create_window(625, 110, window = ForwardButton)
+    BackButtonGUI = canvas.create_window(625, 161, window = BackButton)
+    LeftButtonGUI = canvas.create_window(567, 135, window = LeftButton)
+    RightButtonGUI = canvas.create_window(684, 135, window = RightButton)
+
+# function to draw detect button in whatever mode is passed
 def drawDetectButton(onOff):
     global DetectButtonGUI
     
+    # try delete current button to be replaced
+    try:
+        canvas.delete(DetectButtonGUI)
+    except:
+        pass
+    
+    # set on button if on, else set off button
     if onOff == "on":
         DetectButtonGUI = canvas.create_window(90, 97, window = DetectModeOnButton)
     else:
         DetectButtonGUI = canvas.create_window(90, 97, window = DetectModeOffButton)
 
+# function to draw auto button in whatever mode is passed
 def drawAutoButton(onOff):
     global AutoButtonGUI
     
+    # try delete current button to be replaced
+    try:
+        canvas.delete(AutoButtonGUI)
+    except:
+        pass
+    
+    # set on button if on, else set off button
     if onOff == "on":
         AutoButtonGUI = canvas.create_window(90, 147, window = AutoModeOnButton)
     else:
         AutoButtonGUI = canvas.create_window(90, 147, window = AutoModeOffButton)
 
+# function to draw manual button in whatever mode is passed
 def drawManButton(onOff):
     global ManualButtonGUI
     
+    # try delete current button to be replaced
+    try:
+        canvas.delete(ManualButtonGUI)
+    except:
+        pass
+    
+    # set on button if on, else set off button
     if onOff == "on":
         ManualButtonGUI = canvas.create_window(90, 197, window = ManModeOnButton)
     else:
         ManualButtonGUI = canvas.create_window(90, 197, window = ManModeOffButton)
 
+# function to draw off button
 def drawOffButton():
     global OffButtonGUI
     
+    # try delete current button to be replaced
+    try:
+        canvas.delete(OffButtonGUI)
+    except:
+        pass
+    
+    # set button
     OffButtonGUI = canvas.create_window(90, 247, window = OffModeButton)
 
+# function to display data when mode requires it
+# (may not need with quicker data transfer)
 def setDataOn():
     ## call get distance and write data when indirect addressing is done
     pass
 
-
+# sets mode to off and updates GUI
 def setModeOff():
-    global mode
-    global ModeDescGUI
+    global mode, ModeDescGUI
     
+    # set mode to 0 for off
     mode = 0
     
     # clear canvas to redraw
-    canvas.delete(DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI, ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI)
+    try:
+        canvas.delete(ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI)
+    except:
+        pass
     
+    # call draw buttons function all in the off state
+    clearControlsPanel()
     drawDetectButton("off")
     drawAutoButton("off")
     drawManButton("off")
     drawOffButton()
+    
+    # update mode description to off
     ModeDescGUI = canvas.create_text(80, 57, font = SubheadingFont, text = "Off")
   
+# sets mode to detect and updates GUI
 def setModeDetect():
-    global mode
-    global ModeDescGUI
+    global mode, ModeDescGUI
     
+    # set mode to 1 for detect
     mode = 1
     
-    canvas.delete(DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI, ModeDescGUI)
+    # clear canvas components to be replaced
+    canvas.delete(ModeDescGUI)
     
+    
+    # draw buttons and control panel in relevant states
+    drawControlsPanel()
     drawDetectButton("on")
     drawAutoButton("off")
     drawManButton("off")
     drawOffButton()
+    
+    # update mode description
     ModeDescGUI = canvas.create_text(105, 57, font = SubheadingFont, text = "Detection")
     
+# sets mode to autonomous and updates GUI
 def setModeAuto():
-    global mode
-    global ModeDescGUI
+    global mode, ModeDescGUI
     
+    # update mode to 2 for autonomous
     mode = 2
     
-    canvas.delete(DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI, ModeDescGUI)
-
+    # clear canvas to update
+    canvas.delete(ModeDescGUI)
+    
+    # draw buttons in relevant states
+    clearControlsPanel()
     drawDetectButton("off")
     drawAutoButton("on")
     drawManButton("off")
     drawOffButton()
+    
+    # update mode description
     ModeDescGUI = canvas.create_text(118, 57, font = SubheadingFont, text = "Autonomous")
    
+# sets mode to manual and updates GUI
 def setModeMan():
-    global mode
-    global ModeDescGUI
+    global mode, ModeDescGUI
     
+    # set mode to 3 for manual
     mode = 3
     
-    canvas.delete(DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI, ModeDescGUI)
+    # clear canvas to update
+    canvas.delete(ModeDescGUI)
 
+    # draw buttons in relevant states and control panel
+    drawControlsPanel()
     drawDetectButton("off")
     drawAutoButton("off")
     drawManButton("on")
     drawOffButton()
+    
+    # update mode decription
     ModeDescGUI = canvas.create_text(95, 57, font = SubheadingFont, text = "Manual")
    
-def close():
-    GPIO.cleanup()
-    win.destroy()
-
+# function to set widgets called once at the start
+def setWidgets():
+    global DetectModeOffButton, DetectModeOnButton, AutoModeOffButton, AutoModeOnButton
+    global ManModeOffButton, ManModeOnButton, OffModeButton
+    global ForwardButton, BackButton, LeftButton, RightButton
     
-if __name__ == "__main__":
-    ## Widgets
     DetectModeOffButton = Button(win, text = "Detection Mode", command = setModeDetect, bg = 'orange', height = 2, width = 15)
     DetectModeOnButton = Button(win, text = "Detection Mode", command = setModeDetect, bg = 'green', height = 2, width = 15)
     
@@ -211,20 +357,54 @@ if __name__ == "__main__":
     
     OffModeButton = Button(win, text = "System Off", command = setModeOff, bg = 'red', height = 2, width = 15)
     
+    ForwardButton = Button(win, text = "Forward", activebackground = 'green', height = 2, width = 4)
+    ForwardButton.bind('<ButtonPress-1>', forwardOn)
+    ForwardButton.bind('<ButtonRelease-1>', forwardOff)
+    
+    BackButton = Button(win, text = "Back", activebackground = 'green', height = 2, width = 4)
+    BackButton.bind('<ButtonPress-1>', backOn)
+    BackButton.bind('<ButtonRelease-1>', backOff)
+    
+    LeftButton = Button(win, text = "Left", activebackground = 'green', height = 5, width = 2)
+    LeftButton.bind('<ButtonPress-1>', leftOn)
+    LeftButton.bind('<ButtonRelease-1>', leftOff)
+    
+    RightButton = Button(win, text = "Right", activebackground = 'green', height = 5, width = 2)
+    RightButton.bind('<ButtonPress-1>', rightOn)
+    RightButton.bind('<ButtonRelease-1>', rightOff)
+    
+      
+# method called at the end to clean up GPIO and destroy window
+def close():
+    GPIO.cleanup()
+    win.destroy()
+
+    
+## Main method starting point
+if __name__ == "__main__":
+    
+    #Initate GUI variables
+    InitGUI() 
+    
+    #Iniciate GPIO pins required
+    setup()
+    
+    #Set up widgets
+    setWidgets()
+    
+    # set up canvas with sections and car
     setCanvas()
-    mode = 0
-    drawDetectButton("off")
-    drawAutoButton("off")
-    drawManButton("off")
-    drawOffButton()
-    ModeDescGUI = canvas.create_text(80, 57, font = SubheadingFont, text = "Off")
     
-    F_C_Object_GUI = canvas.create_rectangle(0, 0, 0, 0)
+    # set starting mode to off state
+    setModeOff()
     
-    systemThread = Thread(target = system)
+    # start thread for detection system
+    # this system just reads data from argon and updates variable and displays on GUI
+    systemThread = Thread(target = DetectionSystem)
     systemThread.start()
     
     win.protocol("WM_DELETE_WINDOW", close)
 
+    #Thread to deal with button push events
     win.mainloop()
     
