@@ -2,7 +2,6 @@
 #include <SharpIR.h>
 
 
-
 // distances sensors detect
 double F_C_Dist = 0.0; //may need to be int
 
@@ -29,6 +28,28 @@ SharpIR F_C_rangefinder(pin, model);
 //HC_SR04 F_R_rangefinder = HC_SR04(F_R_trigPin, F_R_echoPin, 5, 300);
 //HC_SR04 R_C_rangefinder = HC_SR04(R_C_trigPin, R_C_echoPin, 5, 300);
 
+int getIRDistance()
+{
+    int distance = F_C_rangefinder.distance();
+    if (distance <= 80 && distance >= 10)
+    {
+        return distance;
+    }
+    else if (distance > 80)
+    {
+        return 81;
+    }
+    else if (distance < 10)
+    {
+        return 10;
+    }
+    else
+    {
+        return distance;
+    }
+}
+
+
 void setup() {
     Particle.variable("F_C_Dist", F_C_Dist);
     
@@ -37,7 +58,7 @@ void setup() {
 void loop() {
     
     
-    F_C_Dist = F_C_rangefinder.distance();
+    F_C_Dist = getIRDistance();
     //F_L_Dist = F_L_rangefinder.getDistanceCM();
     //F_R_Dist = F_R_rangefinder.getDistanceCM();
     //R_C_Dist = R_C_rangefinder.getDistanceCM();
