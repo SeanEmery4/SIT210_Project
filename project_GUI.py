@@ -4,7 +4,8 @@ import tkinter.font
 import RPi.GPIO as GPIO
 from time import sleep
 import requests, json
-from threading import Thread
+from threading import Thread, Lock
+from functools import partial
 
 #set pin mode
 GPIO.setmode(GPIO.BCM)
@@ -14,17 +15,21 @@ GPIO.setwarnings(False)
 
 ## Global Variables
 global win, canvas, headingFont, SubheadingFont #GUI Setup variables
-global mode, F_C_Dist
+global mode, F_C_Dist #vairables used across threads
 global DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI #Mode button variables
 global ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI #Manual button variables
 global Cont_Panel, Cont_Panel_Heading #Control panel variables
 global ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI
+stopAutoThread = True
 
 #GPIO pins for relays
 forwardPin = 2
 backPin = 3
 leftPin = 4
 rightPin = 17
+
+# set up lock for when two threads access same variable
+data_lock = Lock()
 
 ## Functions
 
@@ -65,19 +70,19 @@ def backOff(event):
     GPIO.output(backPin, GPIO.LOW)
     
 # Funtion to turn left pin on
-def leftOn(event):
+def leftOn():
     GPIO.output(leftPin, GPIO.HIGH)
     
 # Funtion to turn left pin off
-def leftOff(event):
+def leftOff():
     GPIO.output(leftPin, GPIO.LOW)
     
 # Funtion to turn right pin on
-def rightOn(event):
+def rightOn():
     GPIO.output(rightPin, GPIO.HIGH)
     
 # Funtion to turn right pin off
-def rightOff(event):
+def rightOff():
     GPIO.output(rightPin, GPIO.LOW)
     
 # function to get distance from argon and return the value
@@ -111,11 +116,11 @@ def writeData(F_C_Dist):
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist)
     elif F_C_Dist <= 80 and F_C_Dist >= 50:
         # if system detects something between 50 and 80cm display figure and object in orange
-        F_C_Object_GUI = canvas.create_rectangle(405, 40, 445, 105, fill = 'orange', outline = 'orange')
+        F_C_Object_GUI = canvas.create_arc(305, 40, 485, 170, start = 60, extent = 60, fill = 'orange', outline = 'orange')
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist_Str)
     elif F_C_Dist < 50:
         # if system detects something less than 50cm away display figure and object in red
-        F_C_Object_GUI = canvas.create_rectangle(405, 40, 445, 105, fill = 'red', outline = 'red')
+        F_C_Object_GUI = canvas.create_arc(305, 40, 485, 170, start = 60, extent = 60, fill = 'red', outline = 'red')
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'red', text = F_C_Dist_Str)
     else:
         # if nothing detected and system not in error, display clear
@@ -123,7 +128,7 @@ def writeData(F_C_Dist):
 
 # function to loop on seperate thread constantly measuring front distance and updating GUI
 def DetectionSystem():
-    global F_C_Dist_GUI, F_C_Object_GUI, mode, F_C_Dist #variables to be monitored and changed
+    global mode, F_C_Dist #variables to be monitored and changed
     
     # infinite loop
     while True:
@@ -167,6 +172,44 @@ def setCanvas():
     F_C_Object_GUI = canvas.create_rectangle(0, 0, 0, 0)
     F_C_Dist_GUI = ""
 
+def setLeftControls(onOff):
+    global LeftButtonGUI
+    
+    # try delete current button to be replaced
+    try:
+        canvas.delete(LeftButtonGUI)
+    except:
+        pass
+    
+    # set on button if on, else set off button
+    if onOff == "on":
+        LeftButtonGUI = canvas.create_window(567, 135, window = LeftOnButton)
+        setRightControls("off")
+        sleep(0.1)
+        leftOn()
+    else:
+        LeftButtonGUI = canvas.create_window(567, 135, window = LeftOffButton)
+        leftOff()
+
+def setRightControls(onOff):
+    global RightButtonGUI
+    
+    # try delete current button to be replaced
+    try:
+        canvas.delete(RightButtonGUI)
+    except:
+        pass
+    
+    # set on button if on, else set off button
+    if onOff == "on":
+        RightButtonGUI = canvas.create_window(684, 135, window = RightOnButton)
+        setLeftControls("off")
+        sleep(0.1)
+        rightOn()
+    else:
+        RightButtonGUI = canvas.create_window(684, 135, window = RightOffButton)
+        rightOff()
+
 def clearControlsPanel():
     try:
         canvas.delete(Cont_Panel, Cont_Panel_Heading, ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI)
@@ -186,8 +229,8 @@ def drawControlsPanel():
     # create buttons
     ForButtonGUI = canvas.create_window(625, 110, window = ForwardButton)
     BackButtonGUI = canvas.create_window(625, 161, window = BackButton)
-    LeftButtonGUI = canvas.create_window(567, 135, window = LeftButton)
-    RightButtonGUI = canvas.create_window(684, 135, window = RightButton)
+    LeftButtonGUI = canvas.create_window(567, 135, window = LeftOffButton)
+    RightButtonGUI = canvas.create_window(684, 135, window = RightOffButton)
 
 # function to draw detect button in whatever mode is passed
 def drawDetectButton(onOff):
@@ -250,22 +293,21 @@ def drawOffButton():
     # set button
     OffButtonGUI = canvas.create_window(90, 247, window = OffModeButton)
 
-# function to display data when mode requires it
-# (may not need with quicker data transfer)
-def setDataOn():
-    ## call get distance and write data when indirect addressing is done
-    pass
 
 # sets mode to off and updates GUI
 def setModeOff():
-    global mode, ModeDescGUI
+    global mode, ModeDescGUI, stopAutoThread
+    
+    stopAutoThread = True
     
     # set mode to 0 for off
-    mode = 0
+    with data_lock: mode = 0
     
     # clear canvas to redraw
     try:
-        canvas.delete(ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI)
+        canvas.delete(ModeDescGUI)
+        canvas.delete(F_C_Dist_GUI)
+        canvas.delete(F_C_Object_GUI)
     except:
         pass
     
@@ -281,10 +323,12 @@ def setModeOff():
   
 # sets mode to detect and updates GUI
 def setModeDetect():
-    global mode, ModeDescGUI
+    global mode, ModeDescGUI, stopAutoThread
+    
+    stopAutoThread = True
     
     # set mode to 1 for detect
-    mode = 1
+    with data_lock: mode = 1
     
     # clear canvas components to be replaced
     canvas.delete(ModeDescGUI)
@@ -297,15 +341,37 @@ def setModeDetect():
     drawManButton("off")
     drawOffButton()
     
+    
     # update mode description
     ModeDescGUI = canvas.create_text(105, 57, font = SubheadingFont, text = "Detection")
     
+
+def AutonomousSystem():
+    global stopAutoThread
+    
+    while True:
+        try:
+            if F_C_Dist < 80:
+                print('STOP')
+                forwardOff('off')
+            elif F_C_Dist >=81:
+                print('GO')
+                forwardOn('on')
+        except:
+            sleep(2)
+            
+        sleep(2)
+        
+        if stopAutoThread:
+            print('Auto Thread Off')
+            break
+
 # sets mode to autonomous and updates GUI
 def setModeAuto():
-    global mode, ModeDescGUI
+    global mode, ModeDescGUI, AutonomousSystemThread, stopAutoThread
     
     # update mode to 2 for autonomous
-    mode = 2
+    with data_lock: mode = 2
     
     # clear canvas to update
     canvas.delete(ModeDescGUI)
@@ -317,15 +383,20 @@ def setModeAuto():
     drawManButton("off")
     drawOffButton()
     
+    stopAutoThread = False
+    AutonomousSystemThread.start()
+    
     # update mode description
     ModeDescGUI = canvas.create_text(118, 57, font = SubheadingFont, text = "Autonomous")
    
 # sets mode to manual and updates GUI
 def setModeMan():
-    global mode, ModeDescGUI
+    global mode, ModeDescGUI, stopAutoThread
+    
+    stopAutoThread = True
     
     # set mode to 3 for manual
-    mode = 3
+    with data_lock: mode = 3
     
     # clear canvas to update
     canvas.delete(ModeDescGUI)
@@ -337,6 +408,7 @@ def setModeMan():
     drawManButton("on")
     drawOffButton()
     
+    
     # update mode decription
     ModeDescGUI = canvas.create_text(95, 57, font = SubheadingFont, text = "Manual")
    
@@ -344,18 +416,24 @@ def setModeMan():
 def setWidgets():
     global DetectModeOffButton, DetectModeOnButton, AutoModeOffButton, AutoModeOnButton
     global ManModeOffButton, ManModeOnButton, OffModeButton
-    global ForwardButton, BackButton, LeftButton, RightButton
+    global ForwardButton, BackButton, LeftOffButton, LeftOnButton, RightOffButton, RightOnButton
     
     DetectModeOffButton = Button(win, text = "Detection Mode", command = setModeDetect, bg = 'orange', height = 2, width = 15)
-    DetectModeOnButton = Button(win, text = "Detection Mode", command = setModeDetect, bg = 'green', height = 2, width = 15)
+    DetectModeOnButton = Button(win, text = "Detection Mode", bg = 'green', height = 2, width = 15)
     
     AutoModeOffButton = Button(win, text = "Autonomous Mode", command = setModeAuto, bg = 'orange', height = 2, width = 15)
-    AutoModeOnButton = Button(win, text = "Autonomous Mode", command = setModeAuto, bg = 'green', height = 2, width = 15)
+    AutoModeOnButton = Button(win, text = "Autonomous Mode", bg = 'green', height = 2, width = 15)
     
     ManModeOffButton = Button(win, text = "Manual Mode", command = setModeMan, bg = 'orange', height = 2, width = 15)
-    ManModeOnButton = Button(win, text = "Manual Mode", command = setModeMan, bg = 'green', height = 2, width = 15)
+    ManModeOnButton = Button(win, text = "Manual Mode", bg = 'green', height = 2, width = 15)
     
     OffModeButton = Button(win, text = "System Off", command = setModeOff, bg = 'red', height = 2, width = 15)
+    
+    LeftOffButton = Button(win, text = "Left", command = lambda: setLeftControls("on"), activebackground = 'green', height = 5, width = 2)
+    LeftOnButton = Button(win, text = "Left", command = lambda: setLeftControls("off"), bg = 'green', height = 5, width = 2)
+
+    RightOffButton = Button(win, text = "Right", command = lambda: setRightControls("on"), activebackground = 'green', height = 5, width = 2)
+    RightOnButton = Button(win, text = "Right", command = lambda: setRightControls("off"), bg = 'green', height = 5, width = 2)
     
     ForwardButton = Button(win, text = "Forward", activebackground = 'green', height = 2, width = 4)
     ForwardButton.bind('<ButtonPress-1>', forwardOn)
@@ -364,14 +442,6 @@ def setWidgets():
     BackButton = Button(win, text = "Back", activebackground = 'green', height = 2, width = 4)
     BackButton.bind('<ButtonPress-1>', backOn)
     BackButton.bind('<ButtonRelease-1>', backOff)
-    
-    LeftButton = Button(win, text = "Left", activebackground = 'green', height = 5, width = 2)
-    LeftButton.bind('<ButtonPress-1>', leftOn)
-    LeftButton.bind('<ButtonRelease-1>', leftOff)
-    
-    RightButton = Button(win, text = "Right", activebackground = 'green', height = 5, width = 2)
-    RightButton.bind('<ButtonPress-1>', rightOn)
-    RightButton.bind('<ButtonRelease-1>', rightOff)
     
       
 # method called at the end to clean up GPIO and destroy window
@@ -398,13 +468,16 @@ if __name__ == "__main__":
     # set starting mode to off state
     setModeOff()
     
+    # iniciate autonomous thread
+    AutonomousSystemThread = Thread(target = AutonomousSystem)
+    
     # start thread for detection system
     # this system just reads data from argon and updates variable and displays on GUI
-    systemThread = Thread(target = DetectionSystem)
-    systemThread.start()
+    DetectionSystemThread = Thread(target = DetectionSystem)
+    DetectionSystemThread.start()
     
     win.protocol("WM_DELETE_WINDOW", close)
 
     #Thread to deal with button push events
     win.mainloop()
-    
+ 
