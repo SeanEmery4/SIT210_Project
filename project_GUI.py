@@ -136,7 +136,7 @@ def DetectionSystem():
         F_C_Dist = getFrontDistance()
         
         # if mode is off do not display data
-        if mode == 0:
+        if (mode == 0 or mode == 3):
             pass
         else:
             # any other mode display data
@@ -348,10 +348,14 @@ def setModeDetect():
 
 def AutonomousSystem():
     global stopAutoThread
+    forwardOff("off")
     
     while True:
         try:
-            if F_C_Dist < 80:
+            if F_C_Dist == "Error":
+                print('STOP')
+                forwardOff('off')
+            elif F_C_Dist < 80:
                 print('STOP')
                 forwardOff('off')
             elif F_C_Dist >=81:
@@ -368,7 +372,7 @@ def AutonomousSystem():
 
 # sets mode to autonomous and updates GUI
 def setModeAuto():
-    global mode, ModeDescGUI, AutonomousSystemThread, stopAutoThread
+    global mode, ModeDescGUI, stopAutoThread
     
     # update mode to 2 for autonomous
     with data_lock: mode = 2
@@ -384,6 +388,7 @@ def setModeAuto():
     drawOffButton()
     
     stopAutoThread = False
+    AutonomousSystemThread = Thread(target = AutonomousSystem)
     AutonomousSystemThread.start()
     
     # update mode description
@@ -399,7 +404,12 @@ def setModeMan():
     with data_lock: mode = 3
     
     # clear canvas to update
-    canvas.delete(ModeDescGUI)
+    try:
+        canvas.delete(ModeDescGUI)
+        canvas.delete(F_C_Dist_GUI)
+        canvas.delete(F_C_Object_GUI)
+    except:
+        pass
 
     # draw buttons in relevant states and control panel
     drawControlsPanel()
@@ -469,7 +479,7 @@ if __name__ == "__main__":
     setModeOff()
     
     # iniciate autonomous thread
-    AutonomousSystemThread = Thread(target = AutonomousSystem)
+    
     
     # start thread for detection system
     # this system just reads data from argon and updates variable and displays on GUI
@@ -480,4 +490,4 @@ if __name__ == "__main__":
 
     #Thread to deal with button push events
     win.mainloop()
- 
+  
