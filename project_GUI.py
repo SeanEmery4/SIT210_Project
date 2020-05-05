@@ -85,6 +85,12 @@ def rightOn():
 def rightOff():
     GPIO.output(rightPin, GPIO.LOW)
     
+def motionOff():
+    forwardOff("off")
+    backOff("off")
+    leftOff()
+    rightOff()
+    
 # function to get distance from argon and return the value
 def getFrontDistance():
     # requests is very slow, hard real time issue, try bluetooth
@@ -136,7 +142,7 @@ def DetectionSystem():
         F_C_Dist = getFrontDistance()
         
         # if mode is off do not display data
-        if (mode == 0 or mode == 3):
+        if (mode == 0 or mode == 1):
             pass
         else:
             # any other mode display data
@@ -244,9 +250,9 @@ def drawDetectButton(onOff):
     
     # set on button if on, else set off button
     if onOff == "on":
-        DetectButtonGUI = canvas.create_window(90, 97, window = DetectModeOnButton)
+        DetectButtonGUI = canvas.create_window(90, 147, window = DetectModeOnButton)
     else:
-        DetectButtonGUI = canvas.create_window(90, 97, window = DetectModeOffButton)
+        DetectButtonGUI = canvas.create_window(90, 147, window = DetectModeOffButton)
 
 # function to draw auto button in whatever mode is passed
 def drawAutoButton(onOff):
@@ -260,9 +266,9 @@ def drawAutoButton(onOff):
     
     # set on button if on, else set off button
     if onOff == "on":
-        AutoButtonGUI = canvas.create_window(90, 147, window = AutoModeOnButton)
+        AutoButtonGUI = canvas.create_window(90, 97, window = AutoModeOnButton)
     else:
-        AutoButtonGUI = canvas.create_window(90, 147, window = AutoModeOffButton)
+        AutoButtonGUI = canvas.create_window(90, 97, window = AutoModeOffButton)
 
 # function to draw manual button in whatever mode is passed
 def drawManButton(onOff):
@@ -298,6 +304,7 @@ def drawOffButton():
 def setModeOff():
     global mode, ModeDescGUI, stopAutoThread
     
+    motionOff()
     stopAutoThread = True
     
     # set mode to 0 for off
@@ -320,15 +327,45 @@ def setModeOff():
     
     # update mode description to off
     ModeDescGUI = canvas.create_text(80, 57, font = SubheadingFont, text = "Off")
+
+# sets mode to manual and updates GUI
+def setModeMan():
+    global mode, ModeDescGUI, stopAutoThread
+    
+    motionOff()
+    stopAutoThread = True
+    
+    # set mode to 3 for manual
+    with data_lock: mode = 1
+    
+    # clear canvas to update
+    try:
+        canvas.delete(ModeDescGUI)
+        canvas.delete(F_C_Dist_GUI)
+        canvas.delete(F_C_Object_GUI)
+    except:
+        pass
+
+    # draw buttons in relevant states and control panel
+    drawControlsPanel()
+    drawDetectButton("off")
+    drawAutoButton("off")
+    drawManButton("on")
+    drawOffButton()
+    
+    
+    # update mode decription
+    ModeDescGUI = canvas.create_text(95, 57, font = SubheadingFont, text = "Manual")
   
 # sets mode to detect and updates GUI
 def setModeDetect():
     global mode, ModeDescGUI, stopAutoThread
     
+    motionOff()
     stopAutoThread = True
     
     # set mode to 1 for detect
-    with data_lock: mode = 1
+    with data_lock: mode = 2
     
     # clear canvas components to be replaced
     canvas.delete(ModeDescGUI)
@@ -362,20 +399,24 @@ def AutonomousSystem():
                 print('GO')
                 forwardOn('on')
         except:
+            motionOff()
             sleep(2)
             
-        sleep(2)
+        sleep(0.1)
         
         if stopAutoThread:
             print('Auto Thread Off')
+            motionOff()
             break
 
 # sets mode to autonomous and updates GUI
 def setModeAuto():
     global mode, ModeDescGUI, stopAutoThread
     
+    motionOff()
+    
     # update mode to 2 for autonomous
-    with data_lock: mode = 2
+    with data_lock: mode = 3
     
     # clear canvas to update
     canvas.delete(ModeDescGUI)
@@ -394,33 +435,6 @@ def setModeAuto():
     # update mode description
     ModeDescGUI = canvas.create_text(118, 57, font = SubheadingFont, text = "Autonomous")
    
-# sets mode to manual and updates GUI
-def setModeMan():
-    global mode, ModeDescGUI, stopAutoThread
-    
-    stopAutoThread = True
-    
-    # set mode to 3 for manual
-    with data_lock: mode = 3
-    
-    # clear canvas to update
-    try:
-        canvas.delete(ModeDescGUI)
-        canvas.delete(F_C_Dist_GUI)
-        canvas.delete(F_C_Object_GUI)
-    except:
-        pass
-
-    # draw buttons in relevant states and control panel
-    drawControlsPanel()
-    drawDetectButton("off")
-    drawAutoButton("off")
-    drawManButton("on")
-    drawOffButton()
-    
-    
-    # update mode decription
-    ModeDescGUI = canvas.create_text(95, 57, font = SubheadingFont, text = "Manual")
    
 # function to set widgets called once at the start
 def setWidgets():
@@ -478,9 +492,6 @@ if __name__ == "__main__":
     # set starting mode to off state
     setModeOff()
     
-    # iniciate autonomous thread
-    
-    
     # start thread for detection system
     # this system just reads data from argon and updates variable and displays on GUI
     DetectionSystemThread = Thread(target = DetectionSystem)
@@ -490,4 +501,3 @@ if __name__ == "__main__":
 
     #Thread to deal with button push events
     win.mainloop()
-  
