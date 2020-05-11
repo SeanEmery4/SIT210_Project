@@ -5,7 +5,7 @@ import RPi.GPIO as GPIO
 from time import sleep
 import requests, json
 from threading import Thread, Lock
-from functools import partial
+#from functools import partial
 
 #set pin mode
 GPIO.setmode(GPIO.BCM)
@@ -15,18 +15,21 @@ GPIO.setwarnings(False)
 
 ## Global Variables
 global win, canvas, headingFont, SubheadingFont #GUI Setup variables
-global mode, F_C_Dist #vairables used across threads
+global mode, F_C_Dist  #vairables used across threads
 global DetectButtonGUI, AutoButtonGUI, ManualButtonGUI, OffButtonGUI #Mode button variables
 global ForButtonGUI, BackButtonGUI, LeftButtonGUI, RightButtonGUI #Manual button variables
 global Cont_Panel, Cont_Panel_Heading #Control panel variables
 global ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI
-stopAutoThread = True
+forwardOnFeedback = False
+DetectOn = False
 
-#GPIO pins for relays
+#GPIO pins for relays and buzzer
 forwardPin = 2
 backPin = 3
 leftPin = 4
 rightPin = 17
+buzzer = 18
+
 
 # set up lock for when two threads access same variable
 data_lock = Lock()
@@ -52,14 +55,66 @@ def setup():
     GPIO.setup(backPin, GPIO.OUT)
     GPIO.setup(leftPin, GPIO.OUT)
     GPIO.setup(rightPin, GPIO.OUT)
+    GPIO.setup(buzzer, GPIO.OUT)
+
+def detectModeSystem():
+    global F_C_Dist, mode, forwardOnFeedback, DetectOn #global variables neded
+    
+    DetectOn = True # set detect bool on so as not only have one active thread
+    
+    print("Detect Mode Start")
+    
+    # while loop to continute until detect mode is changed
+    while mode == 2:
+        # try as when system is first starting up may take some time to get F_C_Dist
+        try:
+            # if F_C_Dist is a string and therefore an Error draw users attention
+            if isinstance(F_C_Dist, str):
+                GPIO.output(buzzer, GPIO.HIGH)
+                sleep(0.3)
+                GPIO.output(buzzer, GPIO.LOW)
+                
+            # if distance is under 80 and forward is on alert user to obstacle ahead    
+            elif F_C_Dist <= 80 and forwardOnFeedback is True:
+                GPIO.output(buzzer, GPIO.HIGH)
+                sleep(0.5)
+                GPIO.output(buzzer, GPIO.LOW)
+                sleep(0.4)
+            # if no error or obstacle turn buzzer off
+            else:
+                GPIO.output(buzzer, GPIO.LOW)
+        except:
+            print("Detect System not yet ready")
+            sleep(0.5)
+            
+        sleep(0.1)
+    
+    # set detectOn to false so system knows no thread is running
+    DetectOn = False
+    print("Detect mode End")
 
 # Funtion to turn forward pin on
 def forwardOn(event):
+    global forwardOnFeedback, DetectOn
+    
     GPIO.output(forwardPin, GPIO.HIGH)
+    
+    forwardOnFeedback = True # let system no forward is on
+    DetectSystemThread = Thread(target = detectModeSystem) # set up thread for detection mode buzzer
+    
+    # if forward is turned on in detect mode need to start thread
+    # also check no detect thread is already running
+    if mode == 2 and DetectOn is False:
+        DetectSystemThread.start()
    
 # Funtion to turn forward pin off
 def forwardOff(event):
+    global forwardOnFeedback
+    
     GPIO.output(forwardPin, GPIO.LOW)
+    # let system know forward is no longer on and turn buzzer off
+    forwardOnFeedback = False
+    GPIO.output(buzzer, GPIO.LOW)
 
 # Funtion to turn back pin on
 def backOn(event):
@@ -85,6 +140,7 @@ def rightOn():
 def rightOff():
     GPIO.output(rightPin, GPIO.LOW)
     
+# Function to turn all motion off
 def motionOff():
     forwardOff("off")
     backOff("off")
@@ -133,7 +189,7 @@ def writeData(F_C_Dist):
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'green', text = "Clear")
 
 # function to loop on seperate thread constantly measuring front distance and updating GUI
-def DetectionSystem():
+def ObjectDetectionSystem():
     global mode, F_C_Dist #variables to be monitored and changed
     
     # infinite loop
@@ -304,9 +360,9 @@ def drawOffButton():
 def setModeOff():
     global mode, ModeDescGUI, stopAutoThread
     
+    # Ensure all relayes are turned off when shifting modes
     motionOff()
-    stopAutoThread = True
-    
+        
     # set mode to 0 for off
     with data_lock: mode = 0
     
@@ -332,9 +388,9 @@ def setModeOff():
 def setModeMan():
     global mode, ModeDescGUI, stopAutoThread
     
+    # Ensure all relayes are turned off when shifting modes
     motionOff()
-    stopAutoThread = True
-    
+        
     # set mode to 3 for manual
     with data_lock: mode = 1
     
@@ -352,17 +408,17 @@ def setModeMan():
     drawAutoButton("off")
     drawManButton("on")
     drawOffButton()
-    
-    
+
     # update mode decription
     ModeDescGUI = canvas.create_text(95, 57, font = SubheadingFont, text = "Manual")
   
+ 
 # sets mode to detect and updates GUI
 def setModeDetect():
     global mode, ModeDescGUI, stopAutoThread
     
+    # Ensure all relayes are turned off when shifting modes
     motionOff()
-    stopAutoThread = True
     
     # set mode to 1 for detect
     with data_lock: mode = 2
@@ -370,15 +426,13 @@ def setModeDetect():
     # clear canvas components to be replaced
     canvas.delete(ModeDescGUI)
     
-    
     # draw buttons and control panel in relevant states
     drawControlsPanel()
     drawDetectButton("on")
     drawAutoButton("off")
     drawManButton("off")
     drawOffButton()
-    
-    
+       
     # update mode description
     ModeDescGUI = canvas.create_text(105, 57, font = SubheadingFont, text = "Detection")
     
@@ -387,32 +441,33 @@ def AutonomousSystem():
     global stopAutoThread
     forwardOff("off")
     
-    while True:
+    # while loop to continue while autonomous mode is on
+    while mode == 3:
+        # try to use data to control vehicle, if theres an error turn all relays off
         try:
-            if F_C_Dist == "Error":
+            if F_C_Dist == "Error" or F_C_Dist < 80:
                 print('STOP')
                 forwardOff('off')
-            elif F_C_Dist < 80:
-                print('STOP')
-                forwardOff('off')
+            #elif F_C_Dist < 80:
+            #    print('STOP')
+            #    forwardOff('off')
             elif F_C_Dist >=81:
                 print('GO')
                 forwardOn('on')
         except:
             motionOff()
-            sleep(2)
+            sleep(0.1)
             
         sleep(0.1)
-        
-        if stopAutoThread:
-            print('Auto Thread Off')
-            motionOff()
-            break
+            
+    print('Auto Thread Off')
+    motionOff() # turn all motion off when exiting mode
 
 # sets mode to autonomous and updates GUI
 def setModeAuto():
     global mode, ModeDescGUI, stopAutoThread
     
+    # Ensure all relayes are turned off when shifting modes
     motionOff()
     
     # update mode to 2 for autonomous
@@ -428,7 +483,7 @@ def setModeAuto():
     drawManButton("off")
     drawOffButton()
     
-    stopAutoThread = False
+    #stopAutoThread = False
     AutonomousSystemThread = Thread(target = AutonomousSystem)
     AutonomousSystemThread.start()
     
@@ -492,12 +547,13 @@ if __name__ == "__main__":
     # set starting mode to off state
     setModeOff()
     
-    # start thread for detection system
+    # start thread for object detection system
     # this system just reads data from argon and updates variable and displays on GUI
-    DetectionSystemThread = Thread(target = DetectionSystem)
-    DetectionSystemThread.start()
+    ObjectDetectionSystemThread = Thread(target = ObjectDetectionSystem)
+    ObjectDetectionSystemThread.start()
     
     win.protocol("WM_DELETE_WINDOW", close)
 
     #Thread to deal with button push events
     win.mainloop()
+    
