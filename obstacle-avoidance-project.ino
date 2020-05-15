@@ -1,23 +1,30 @@
 // This #include statement was automatically added by the Particle IDE.
-#include <HC_SR04.h>
+#include <MQTT.h>
 
+// This #include statement was automatically added by the Particle IDE.
+#include <HC_SR04.h>
 
 // This #include statement was automatically added by the Particle IDE.
 #include <SharpIR.h>
 
+MQTT client("test.mosquitto.org", 1883, callback);
 
+// Method called when a message is received. Not needed
+void callback(char* topic, byte* payload, unsigned int length) 
+{
+}
 
 // distances sensors detect
-double F_C_Dist = 0.0; //may need to be int
+int F_C_Dist = 0.0; 
+char message[4];
 
-//double F_R_Dist = 0.0;
 //double R_C_Dist = 0.0;
 
 // SHARP distance sensor pin and model
 int pin = A1;
 int model = 1080;
 
-// Ultrasonic pins
+// Ultrasonic pins not working
 //int R_C_trigPin = D5;
 //int R_C_echoPin = D4;
 
@@ -51,6 +58,7 @@ int getIRDistance()
 
 void setup() {
     Particle.variable("F_C_Dist", F_C_Dist);
+    client.connect("SIT210_SE_MQTT_Arg");
     
 }
 
@@ -65,7 +73,21 @@ void loop() {
     
     //Particle.publish("Rear Centre Distance", (String)R_C_Dist, PUBLIC);
     
+    if (client.isConnected())
+    {
+        
+        
+        sprintf(message, "%d", F_C_Dist);
+        client.publish("F_C_Distance_Log", message);
+        
+    }
+    else
+    {
+        Particle.publish("ArgonLog", "Client Not Connected");
+    }
     
     delay(500);
+    
+    client.loop();
 
 }
