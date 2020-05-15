@@ -5,6 +5,7 @@ import RPi.GPIO as GPIO
 from time import sleep
 import requests, json
 from threading import Thread, Lock
+import paho.mqtt.client as mqtt
 #from functools import partial
 
 #set pin mode
@@ -49,6 +50,24 @@ def InitGUI():
     canvas = Canvas(win, width = 715, height = 410)
     canvas.pack()
 
+def messageFunction(client, userdata, message):
+    global F_C_Dist
+    message = str(message.payload.decode("utf-8"))
+    F_C_Dist = int(message)
+ 
+def onConnectFunction(client, userdata, flags, rc):
+    if rc == 0:
+        print("Connection Established")
+
+def InitMQTT():
+    ourClient = mqtt.Client("SIT210_SE_MQTT_Pi") # Create a MQTT client object
+    ourClient.connect("test.mosquitto.org", 1883) # Connect to the test MQTT broker
+    ourClient.subscribe("F_C_Distance_Log") # Subscribe to log from particle
+    ourClient.on_connect = onConnectFunction
+    ourClient.on_message = messageFunction      # Attach the messageFunction to subscription
+
+    ourClient.loop_start()
+
 # Set relay pins as outputs
 def setup():
     GPIO.setup(forwardPin, GPIO.OUT)
@@ -91,7 +110,7 @@ def detectModeSystem():
     
     # set detectOn to false so system knows no thread is running
     DetectOn = False
-    print("Detect mode End")
+    print("Detect Mode End")
 
 # Funtion to turn forward pin on
 def forwardOn(event):
@@ -195,7 +214,7 @@ def ObjectDetectionSystem():
     # infinite loop
     while True:
         # get distance from argon and store in F_C_Dist
-        F_C_Dist = getFrontDistance()
+        #F_C_Dist = getFrontDistance()
         
         # if mode is off do not display data
         if (mode == 0 or mode == 1):
@@ -203,6 +222,8 @@ def ObjectDetectionSystem():
         else:
             # any other mode display data
             writeData(F_C_Dist)
+            
+        sleep(0.1)
         
 # function to set canvas at start up
 def setCanvas():
@@ -534,6 +555,9 @@ if __name__ == "__main__":
     
     #Initate GUI variables
     InitGUI() 
+    
+    #Initiate MQTT connection
+    InitMQTT()
     
     #Iniciate GPIO pins required
     setup()
