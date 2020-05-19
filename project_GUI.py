@@ -6,7 +6,6 @@ from time import sleep
 import requests, json
 from threading import Thread, Lock
 import paho.mqtt.client as mqtt
-#from functools import partial
 
 #set pin mode
 GPIO.setmode(GPIO.BCM)
@@ -23,6 +22,7 @@ global Cont_Panel, Cont_Panel_Heading #Control panel variables
 global ModeDescGUI, F_C_Dist_GUI, F_C_Object_GUI
 forwardOnFeedback = False
 DetectOn = False
+F_C_Dist = "Error" #start F_C_Dist as error incase can't connect to on-board system
 
 #GPIO pins for relays and buzzer
 forwardPin = 2
@@ -30,7 +30,6 @@ backPin = 3
 leftPin = 4
 rightPin = 17
 buzzer = 18
-
 
 # set up lock for when two threads access same variable
 data_lock = Lock()
@@ -53,19 +52,29 @@ def InitGUI():
 def messageFunction(client, userdata, message):
     global F_C_Dist
     message = str(message.payload.decode("utf-8"))
-    F_C_Dist = int(message)
+    
+    try:
+        F_C_Dist = int(message)
+    except:
+        F_C_Dist = message
  
 def onConnectFunction(client, userdata, flags, rc):
     if rc == 0:
         print("Connection Established")
+        
+def onDisconnectFunction(client, userdata, rc):
+    global F_C_Dist
+    F_C_Dist = "Error"
 
 def InitMQTT():
+    
     ourClient = mqtt.Client("SIT210_SE_MQTT_Pi") # Create a MQTT client object
     ourClient.connect("test.mosquitto.org", 1883) # Connect to the test MQTT broker
     ourClient.subscribe("F_C_Distance_Log") # Subscribe to log from particle
     ourClient.on_connect = onConnectFunction
     ourClient.on_message = messageFunction      # Attach the messageFunction to subscription
-
+    ourClient.on_disconnect = onDisconnectFunction
+    
     ourClient.loop_start()
 
 # Set relay pins as outputs
@@ -166,19 +175,7 @@ def motionOff():
     leftOff()
     rightOff()
     
-# function to get distance from argon and return the value
-def getFrontDistance():
-    # requests is very slow, hard real time issue, try bluetooth
-    responce = requests.get('https://api.particle.io/v1/devices/e00fce6825acdbf3eaef2482/F_C_Dist?access_token=05a78f428e275ea748d57326857802757ed4ead0')
-    respJSON = responce.json()
     
-    # try get distance returned as an int and return
-    try:
-        dist = int(respJSON.get("result"))
-        return dist
-    except:
-        return "Error"
-
 # function to write ditance data and display to GUI
 def writeData(F_C_Dist):
     global F_C_Dist_GUI, F_C_Object_GUI # variables to write to
@@ -213,9 +210,7 @@ def ObjectDetectionSystem():
     
     # infinite loop
     while True:
-        # get distance from argon and store in F_C_Dist
-        #F_C_Dist = getFrontDistance()
-        
+                
         # if mode is off do not display data
         if (mode == 0 or mode == 1):
             pass
@@ -223,7 +218,7 @@ def ObjectDetectionSystem():
             # any other mode display data
             writeData(F_C_Dist)
             
-        sleep(0.1)
+        sleep(0.5)
         
 # function to set canvas at start up
 def setCanvas():
@@ -241,7 +236,7 @@ def setCanvas():
     
     # create data section
     canvas.create_text(40, 350, font = SubheadingFont, text = "Front: ")
-    canvas.create_text(41, 375, font = SubheadingFont, text = "Rear: ")
+    #canvas.create_text(41, 375, font = SubheadingFont, text = "Rear: ")
     
     #create car
     canvas.create_rectangle(320, 110, 470, 360, fill = 'blue2', outline = 'blue') #body
@@ -490,7 +485,7 @@ def setModeAuto():
     
     # Ensure all relayes are turned off when shifting modes
     motionOff()
-    
+       
     # update mode to 2 for autonomous
     with data_lock: mode = 3
     
@@ -546,6 +541,7 @@ def setWidgets():
       
 # method called at the end to clean up GPIO and destroy window
 def close():
+    setModeOff()
     GPIO.cleanup()
     win.destroy()
 
