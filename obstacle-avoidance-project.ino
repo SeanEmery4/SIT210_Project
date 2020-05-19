@@ -85,7 +85,7 @@ void loop() {
         {
             // if distance has changed publish new value
             sprintf(message, "%d", F_C_Dist);
-            client.publish("F_C_Distance_Log", message, true); // true is to retain most recent publish. So if Pi subscribes after latest publish it still gets most recent message
+            client.publish("F_C_Distance_Log", message); 
         }
        
     }
