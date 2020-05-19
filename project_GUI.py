@@ -49,32 +49,35 @@ def InitGUI():
     canvas = Canvas(win, width = 715, height = 410)
     canvas.pack()
 
+# function called when MQTT broker receives new publish
 def messageFunction(client, userdata, message):
     global F_C_Dist
-    message = str(message.payload.decode("utf-8"))
+    message = str(message.payload.decode("utf-8")) #convert data to string
     
     try:
-        F_C_Dist = int(message)
+        F_C_Dist = int(message) #try store as an int
     except:
-        F_C_Dist = message
+        F_C_Dist = message #if not must be an error so store error as string
  
+# when MQTT connects output successful connection established
 def onConnectFunction(client, userdata, flags, rc):
     if rc == 0:
         print("Connection Established")
-        
+ 
+# if MQTT broker disconnects suddenly change F_C_Dist to error
 def onDisconnectFunction(client, userdata, rc):
     global F_C_Dist
     F_C_Dist = "Error"
 
+# function to set up MQTT subscription from particle argon
 def InitMQTT():
-    
     ourClient = mqtt.Client("SIT210_SE_MQTT_Pi") # Create a MQTT client object
     ourClient.connect("test.mosquitto.org", 1883) # Connect to the test MQTT broker
     ourClient.subscribe("F_C_Distance_Log") # Subscribe to log from particle
     ourClient.on_connect = onConnectFunction
-    ourClient.on_message = messageFunction      # Attach the messageFunction to subscription
+    ourClient.on_message = messageFunction # Attach the messageFunction to subscription
     ourClient.on_disconnect = onDisconnectFunction
-    
+    # start thread to monitor MQTT broker
     ourClient.loop_start()
 
 # Set relay pins as outputs
@@ -85,10 +88,12 @@ def setup():
     GPIO.setup(rightPin, GPIO.OUT)
     GPIO.setup(buzzer, GPIO.OUT)
 
+# function thread for detection system to monitor forward motion and if obstacle
+# is detected and car going forward turn on buzzer
 def detectModeSystem():
     global F_C_Dist, mode, forwardOnFeedback, DetectOn #global variables neded
     
-    DetectOn = True # set detect bool on so as not only have one active thread
+    DetectOn = True # set detect bool on so as to only have one active thread
     
     print("Detect Mode Start")
     
@@ -127,7 +132,7 @@ def forwardOn(event):
     
     GPIO.output(forwardPin, GPIO.HIGH)
     
-    forwardOnFeedback = True # let system no forward is on
+    forwardOnFeedback = True # let system know forward is on
     DetectSystemThread = Thread(target = detectModeSystem) # set up thread for detection mode buzzer
     
     # if forward is turned on in detect mode need to start thread
@@ -170,7 +175,7 @@ def rightOff():
     
 # Function to turn all motion off
 def motionOff():
-    forwardOff("off")
+    forwardOff("off") #buzzer also turned off here
     backOff("off")
     leftOff()
     rightOff()
@@ -204,7 +209,7 @@ def writeData(F_C_Dist):
         # if nothing detected and system not in error, display clear
         F_C_Dist_GUI = canvas.create_text(100, 350, font = SubheadingFont, fill = 'green', text = "Clear")
 
-# function to loop on seperate thread constantly measuring front distance and updating GUI
+# function to loop on seperate thread constantly updating GUI distance
 def ObjectDetectionSystem():
     global mode, F_C_Dist #variables to be monitored and changed
     
@@ -539,7 +544,7 @@ def setWidgets():
     BackButton.bind('<ButtonRelease-1>', backOff)
     
       
-# method called at the end to clean up GPIO and destroy window
+# method called at the end to turn system off, clean up GPIO and destroy window
 def close():
     setModeOff()
     GPIO.cleanup()
