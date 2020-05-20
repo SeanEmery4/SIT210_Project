@@ -79,15 +79,9 @@ void loop() {
     // if client is connected to MQTT broker then publish reading to broker, if not publish error
     if (client.isConnected())
     {
-        // test to see if F_C_Dist has changed since last loop
-        // if not don't publish same value
-        if ((String)F_C_Dist != message)
-        {
-            // if distance has changed publish new value
-            sprintf(message, "%d", F_C_Dist);
-            client.publish("F_C_Distance_Log", message); 
-        }
-       
+        sprintf(message, "%d", F_C_Dist);
+        client.publish("F_C_Distance_Log", message); 
+        
     }
     else
     {
