@@ -60,8 +60,8 @@ int getIRDistance()
 // set up particle variable and connect to MQTT broker
 void setup() {
     Particle.variable("F_C_Dist", F_C_Dist);
-    client.connect("SIT210_SE_MQTT_Arg");
-    
+    client.connect("SIT210_SE_MQTT_Arg", NULL, NULL, "F_C_Distance_Log", MQTT::QOS1, 0, "Error", true);
+   
     //set up message to iniciate for first if statement
     sprintf(message, "%d", F_C_Dist);
 }
@@ -85,8 +85,9 @@ void loop() {
     }
     else
     {
-        client.publish("F_C_Distance_Log", "Error");
-        //Particle.publish("MQTT_Error", "Client Not Connected"); // for testing
+        //client.publish("F_C_Distance_Log", "Error");
+        Particle.publish("MQTT_Error", "Client Not Connected"); // for testing
+        delay(900);
     }
     
     delay(100);
