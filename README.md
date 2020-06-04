@@ -5,7 +5,8 @@ The on board system contains a Sharp IR sensor and Particle Argon.
 The central system is a raspberry pi with a GUI, 4 relay bank and buzzer.
 Communication between the two is through MQTT.
 
-Hardware Requires:
+
+Hardware Required:
 
 •	Particle Argon
 •	Miniature breadboard
@@ -22,12 +23,16 @@ Hardware Requires:
 •	Buzzer
 •	Remote controlled car controller
 
+
 Software Required:
+
 •	Particle Web IDE
 •	NOOBS operating system (installed on micro SD card)
 •	Python IDE
 
+
 On-Board System Set Up:
+
 Ensure the IR distance sensor is mounted securely to the front of the vehicle the detection system is to be used on. 
 Ensure Particle Argon is securely mounted on board the vehicle and wire the sensor to the device through use of a miniature breadboard. 
 Wire the VCC pin from the sensor to the 5V pin of the voltage converter. 
@@ -36,7 +41,9 @@ Wire the GND pin on the sensor to GND on the Argon and the data pin to pin A1.
 Plug in the power supply.
 Ensure the firmware for Particle Argon is downloaded from this repo and successfully flashed to the device.
 
+
 Central System Set Up:
+
 The central system should be set up on a Raspberry Pi. 
 Set up the 4-channel relay bank near the Raspberry Pi and supply 5 volts to the VCC pin and GND to a Ground pin on the Raspberry Pi. 
 Wire the forward relay IN to GPIO02, the back relay IN to GPIO03, the left relay IN to GPIO04 and the right relay IN to GPIO17. 
@@ -50,7 +57,9 @@ Wire buzzer active pin to GPIO18 and the negative pin to GND.
 Ensure Raspberry Pi is set up with NOOBS operating system and plug in to the power supply.
 Ensure Python software from this repo is downloaded and opened in an IDE on the Raspberry Pi.
 
+
 User Manual:
+
 Run the code on the Raspberry Pi and wait for the user interface to appear in a window. 
 The system should be in the off mode. This can be seen by the fact that none of the other mode’s buttons are green, the description ‘Off’ is displayed at the top of the mode panel and that there is no data being displayed in the data panel at the bottom right.
 To control the car from the GUI without any detection, press the manual button. 
