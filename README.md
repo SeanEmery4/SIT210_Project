@@ -53,7 +53,7 @@ Ensure Particle Argon is securely mounted on board the vehicle and wire the sens
 Wire the VCC pin from the sensor to the 5V pin of the voltage converter. 
 Wire the 3.3V pin on the voltage converter to the 3.3V pin on Argon and the GND pin to the Argon GND pin. 
 Wire the GND pin on the sensor to GND on the Argon and the data pin to pin A1. 
-Plug in the power supply.
+Plug in the power supply to the Argon.
 Ensure the firmware for Particle Argon is downloaded from this repo and successfully flashed to the device.
 
 
@@ -75,7 +75,7 @@ Ensure Python software from this repo is downloaded and opened in an IDE on the 
 
 User Manual:
 
-Run the code on the Raspberry Pi and wait for the user interface to appear in a window. 
+Ensure on-board system is running. Run the code on the Raspberry Pi and wait for the user interface to appear in a window. 
 The system should be in the off mode. This can be seen by the fact that none of the other mode’s buttons are green, the description ‘Off’ is displayed at the top of the mode panel and that there is no data being displayed in the data panel at the bottom right.
 To control the car from the GUI without any detection, press the manual button. 
 The system will shift into this mode as seen by the manual button being coloured green, the mode description being “Manual’ and the controls panel appearing in the top right. 
