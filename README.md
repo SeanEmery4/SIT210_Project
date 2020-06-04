@@ -9,25 +9,40 @@ Communication between the two is through MQTT.
 Hardware Required:
 
 •	Particle Argon
+
 •	Miniature breadboard
+
 •	Sharp IR distance sensor
+
 •	3.3V to 5V converter
+
 •	Battery pack
+
 •	Jumper cables
+
 •	Remote controlled car
+
 •	Raspberry Pi 
+
 •	Micro SD card
+
 •	Power supply
+
 •	4-channel relay bank
+
 •	Breadboard
+
 •	Buzzer
+
 •	Remote controlled car controller
 
 
 Software Required:
 
 •	Particle Web IDE
+
 •	NOOBS operating system (installed on micro SD card)
+
 •	Python IDE
 
 
